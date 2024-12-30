@@ -1,9 +1,9 @@
 import gleam/dict
-import gleam/list
-import gleam/result
-import gleam/function
-import gleam/otp/actor
 import gleam/erlang/process
+import gleam/function
+import gleam/list
+import gleam/otp/actor
+import gleam/result
 
 pub opaque type ManagerMessage(resource_type, result_type) {
   CheckIn(process.Pid)
@@ -78,27 +78,18 @@ pub fn start(
             })
 
           let selector =
-            list.fold(
-              subjects,
-              selector,
-              fn(selector, subject) {
-                process.selecting_process_down(
-                  selector,
-                  subject.1,
-                  ProcessDown(_),
-                )
-              },
-            )
+            list.fold(subjects, selector, fn(selector, subject) {
+              process.selecting_process_down(selector, subject.1, ProcessDown(_))
+            })
 
           actor.Ready(
             Puddle(
               selector,
               create_resource,
-              idle: list.map(
-                subjects,
-                fn(subject) { #(subject.0, IdleWorker(subject.1, subject.2)) },
-              )
-              |> dict.from_list,
+              idle: list.map(subjects, fn(subject) {
+                #(subject.0, IdleWorker(subject.1, subject.2))
+              })
+                |> dict.from_list,
               busy: dict.new(),
             ),
             selector,
@@ -172,7 +163,7 @@ fn new(size: Int, create_resource: fn() -> Result(resource_type, Nil)) {
     case create_resource() {
       Ok(initial_state) -> {
         actor.start(initial_state, handle_resource_message)
-        |> result.nil_error()
+        |> result.replace_error(Nil)
       }
       Error(Nil) -> Error(Nil)
     }
@@ -187,30 +178,30 @@ fn handle_manager_message(
     ManagerShutdown(shutdown_resource) -> {
       list.each(
         puddle.idle
-        |> dict.to_list
-        |> list.map(fn(subject) {
-          case subject.1 {
-            IdleWorker(monitor, subject) -> {
-              process.demonitor_process(monitor)
-              subject
+          |> dict.to_list
+          |> list.map(fn(subject) {
+            case subject.1 {
+              IdleWorker(monitor, subject) -> {
+                process.demonitor_process(monitor)
+                subject
+              }
             }
-          }
-        }),
+          }),
         process.send(_, ResourceShutdown(shutdown_resource)),
       )
 
       list.each(
         puddle.busy
-        |> dict.to_list
-        |> list.map(fn(subject) {
-          case subject.1 {
-            BusyWorker(_, user_monitor, worker_monitor, subject) -> {
-              process.demonitor_process(user_monitor)
-              process.demonitor_process(worker_monitor)
-              subject
+          |> dict.to_list
+          |> list.map(fn(subject) {
+            case subject.1 {
+              BusyWorker(_, user_monitor, worker_monitor, subject) -> {
+                process.demonitor_process(user_monitor)
+                process.demonitor_process(worker_monitor)
+                subject
+              }
             }
-          }
-        }),
+          }),
         process.send(_, ResourceShutdown(shutdown_resource)),
       )
 

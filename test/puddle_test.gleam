@@ -1,10 +1,10 @@
 import gleam/int
 import gleam/list
+import gleam/otp/task
 import gleam/string
-import puddle
 import gleeunit
 import gleeunit/should
-import gleam/otp/task
+import puddle
 import simplifile.{append, delete, read}
 
 pub fn main() {
@@ -18,7 +18,7 @@ pub fn parallel_test() {
     puddle.start(
       3,
       fn() {
-        int.random(1024, 8192)
+        int.random(8192 - 1024) + 1024
         |> Ok
       },
       32,
@@ -87,24 +87,21 @@ pub fn parallel_test() {
 
   let split_string = string.split(content, " ")
   let first =
-    list.at(split_string, 0)
+    list.first(split_string)
     |> should.be_ok
 
   let #(chains, _, _) =
     split_string
-    |> list.fold(
-      #([], [], first),
-      fn(acc, n_str) {
-        case n_str == acc.2 {
-          True -> #(acc.0, list.prepend(acc.1, n_str), n_str)
-          False ->
-            case acc.1 {
-              [] -> #(acc.0, [n_str], n_str)
-              _ -> #(list.prepend(acc.0, acc.1), [n_str], n_str)
-            }
-        }
-      },
-    )
+    |> list.fold(#([], [], first), fn(acc, n_str) {
+      case n_str == acc.2 {
+        True -> #(acc.0, list.prepend(acc.1, n_str), n_str)
+        False ->
+          case acc.1 {
+            [] -> #(acc.0, [n_str], n_str)
+            _ -> #(list.prepend(acc.0, acc.1), [n_str], n_str)
+          }
+      }
+    })
 
   // we could use `list.all`, which is stronger, but then the test would only almost always succeed!
   // but this is already enough to establish that `puddle` is able to run tasks in parallel
